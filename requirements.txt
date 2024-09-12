@@ -3,3 +3,5 @@ openai
 requests
 bs4
 fitz
+anthropic
+google-generativeai
