@@ -6,7 +6,7 @@ import google.generativeai as genai
 from anthropic import Anthropic
 from anthropic.types.message import Message
 
-st.title("This is HW 2")
+st.title("Poonam Bhogale HW 2")
 
 
 # Ask user for their OpenAI API key via st.text_input.
