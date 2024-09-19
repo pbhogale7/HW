@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from openai import OpenAI
-#from langchain_ollama import OllamaLLM
 import anthropic
 
 # Title of the Streamlit app
@@ -34,8 +33,6 @@ selected_llm_for_chatbot = st.sidebar.selectbox(
     (
         "OpenAI: gpt-3.5-turbo",
         "OpenAI: gpt-4 (Advanced)",
-        "LLaMa: llama3.1-8b",
-        "LLaMa: llama3.1-405b (Advanced)",
         "Claude: claude-3-haiku-20240307",
         "Claude: claude-3-5-sonnet-20240620 (Advanced)",
     ),
