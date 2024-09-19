@@ -5,7 +5,7 @@ from openai import OpenAI
 import anthropic
 
 # Title of the Streamlit app
-st.title("Just practicing Streamlit Code")
+st.title("HW3 -- practicing Streamlit Code")
 
 # Fetch the API keys from streamlit secrets
 openai_api_key = st.secrets["OPEN_AI_KEY"]
