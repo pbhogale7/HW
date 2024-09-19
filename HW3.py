@@ -10,7 +10,7 @@ st.title("HW3")
 
 # Fetch the API keys from streamlit secrets
 openai_api_key = st.secrets["OPEN_AI_KEY"]
-claude_api_key = st.secrets["CLAUDE_KEY"]
+claude_api_key = st.secrets["CLAUDE_AI_KEY"]
 
 # Set API keys for OpenAI and Anthropic
 client = OpenAI(api_key=st.secrets["OPEN_AI_KEY"])
