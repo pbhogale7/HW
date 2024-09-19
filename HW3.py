@@ -2,14 +2,15 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from openai import OpenAI
+#from langchain_ollama import OllamaLLM
 import anthropic
 
 # Title of the Streamlit app
-st.title("HW3 -- practicing Streamlit Code")
+st.title("HW3")
 
 # Fetch the API keys from streamlit secrets
 openai_api_key = st.secrets["OPEN_AI_KEY"]
-claude_api_key = st.secrets["CLAUDE_AI_KEY"]
+claude_api_key = st.secrets["CLAUDE_KEY"]
 
 # Set API keys for OpenAI and Anthropic
 client = OpenAI(api_key=st.secrets["OPEN_AI_KEY"])
@@ -31,26 +32,22 @@ behavior = st.sidebar.radio(
 selected_llm_for_chatbot = st.sidebar.selectbox(
     "Choose the model for Chatbot",
     (
-        "OpenAI: gpt-3.5-turbo",
-        "OpenAI: gpt-4 (Advanced)",
+        "OpenAI: gpt 4o-mini",
         "Claude: claude-3-haiku-20240307",
-        "Claude: claude-3-5-sonnet-20240620 (Advanced)",
+    
     ),
 )
 
-if selected_llm_for_chatbot == "OpenAI: gpt-3.5-turbo":
-    model_to_use_for_chatbot = "gpt-3.5-turbo"
+if selected_llm_for_chatbot == "OpenAI: O1-mini":
+    model_to_use_for_chatbot = "gpt-4o-mini"
 
-elif selected_llm_for_chatbot == "OpenAI: gpt-4 (Advanced)":
-    model_to_use_for_chatbot = "gpt-4"
+elif selected_llm_for_chatbot == "OpenAI: gpt 4o-mini":
+    model_to_use_for_chatbot = "gpt-4o-mini"
+
 
 elif selected_llm_for_chatbot == "Claude: claude-3-haiku-20240307":
     model_to_use_for_chatbot = "claude-instant"
 
-elif (
-    selected_llm_for_chatbot == "Claude: claude-3-5-sonnet-20240620 (Advanced)"
-):
-    model_to_use_for_chatbot = "claude-2"
 else:
     model_to_use_for_chatbot = None
 
@@ -155,7 +152,7 @@ def manage_memory(messages, behavior):
 
 # Function to generate summary (needed for 'Summarize after 5 interactions')
 def generate_summary(text, instruction, model_to_use):
-    if model_to_use in ["gpt-3.5-turbo", "gpt-4"]:
+    if model_to_use in ["gpt-4o-mini", "gpt-4o-mini"]:
         return summarize_with_openai(text, instruction, model_to_use)
 
     elif model_to_use.startswith("claude"):
@@ -175,6 +172,7 @@ def summarize_with_openai(text, instruction, model):
     )
     summary = response.choices[0].message.content
     return summary # commenting this because I am getting the summary twice
+
 
 def summarize_with_claude(text, instruction, model):
     client = anthropic.Client(api_key=claude_api_key)
@@ -207,9 +205,9 @@ if prompt := st.chat_input("Ask the chatbot a question or interact:"):
 
     # Function to get chatbot response
     def get_chatbot_response(messages, model_to_use):
-        if model_to_use in ["gpt-3.5-turbo", "gpt-4"]:
+        if model_to_use in ["gpt-4o-mini", "gpt-4o-mini"]:
             return chatbot_response_openai(messages, model_to_use)
-        elif model_to_use.startswith("claude"):
+        elif model_to_use in ["Claude: claude-3-haiku-20240307"] :
             return chatbot_response_claude(messages, model_to_use)
         else:
             st.error("Model not supported.")
@@ -221,6 +219,7 @@ if prompt := st.chat_input("Ask the chatbot a question or interact:"):
         )
         assistant_message = response.choices[0].message.content
         return assistant_message
+
 
     def chatbot_response_claude(messages, model):
         client = anthropic.Client(api_key=claude_api_key)
