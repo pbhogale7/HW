@@ -1,7 +1,12 @@
 streamlit
+tornado==6.3.3
 openai
-requests
 bs4
-fitz
-anthropic
 google-generativeai
+anthropic
+mistralai
+tiktoken
+PyMuPDF
+chromadb
+pysqlite3-binary
+protobuf>=3.20,<5

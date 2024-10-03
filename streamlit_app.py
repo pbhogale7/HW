@@ -10,8 +10,8 @@ st.title("HW Manager")
 
 hw1_page = st.Page("HW1.py", title="HW1")
 hw2_page = st.Page("HW2.py", title="HW2")
-hw3_page = st.Page("HW3.py", title="HW3" , default=True)
-
-pg = st.navigation([hw1_page, hw2_page, hw3_page])
+hw3_page = st.Page("HW3.py", title="HW3")
+hw5_page = st.Page("HW5.py", title="HW5", default= True)
+pg = st.navigation([hw1_page, hw2_page, hw3_page, hw5_page])
 
 pg.run()
