@@ -194,7 +194,7 @@ st.sidebar.title("Model Selection")
 selected_model = st.sidebar.radio(
     "Choose an LLM:", ("OpenAI GPT-4", "Anthropic Claude", "Google Gemini"))
 
-st.title("iSchool Chatbot")
+st.title("Chatbot Assistant for iSchool")
 
 if not st.session_state.system_ready:
     with st.spinner("Processing documents and preparing the system..."):
