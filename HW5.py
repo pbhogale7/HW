@@ -206,7 +206,7 @@ if not st.session_state.system_ready:
             st.error("Failed to create or load the document collection. Please check the zip file and try again.")
 
 if st.session_state.system_ready and st.session_state.collection:
-    st.subheader(f"Chat with the AI Assistant (Using {selected_model})")
+    st.subheader(f"Chat with the iSchool AI Assistant (Using {selected_model})")
 
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
