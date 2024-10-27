@@ -10,3 +10,8 @@ PyMuPDF
 chromadb
 pysqlite3-binary
 protobuf>=3.20,<5
+streamlit
+websocket
+audio_recorder_streamlit
+base64
+collections
