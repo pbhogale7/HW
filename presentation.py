@@ -20,7 +20,7 @@ import chromadb
 # Initialize OpenAI client
 def setup_openai_client():
     if 'openai_client' not in st.session_state:
-        api_key = st.secrets["OPEN_AI_KEY"]
+        api_key = st.secrets["openai_api_key"]
         st.session_state.openai_client = OpenAI(api_key=api_key)
     return st.session_state.openai_client
 
@@ -348,25 +348,22 @@ if st.session_state.system_ready:
                     auto_play_audio(message["audio"])
 
     # Footer with input elements
-        chat_container = st.container()
-    with chat_container:
-        for message in st.session_state.messages:
-            st.write(message["content"])
-
-    # Text and voice input
-    col1, col2 = st.columns([8, 2])
-    with col2:
-        st.markdown('<div class="voice-recorder-container">', unsafe_allow_html=True)
-        recorded_audio = audio_recorder(
-            text="", 
-            recording_color="#e74c3c", 
-            neutral_color="#95a5a6", 
-            key="voice_recorder"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col1:
-        text_input = st.text_input("Type your message or use voice input...")
+    with st.container():
+        # Voice recorder
+        col1, col2 = st.columns([8, 2])
+        with col2:
+            st.markdown('<div class="voice-recorder-container">', unsafe_allow_html=True)
+            recorded_audio = audio_recorder(
+                text="",
+                recording_color="#e74c3c",
+                neutral_color="#95a5a6",
+                key="voice_recorder"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Text input
+        with col1:
+            text_input = st.chat_input("Type your message or use voice input...")
 
     # Handle text input
     if text_input and not st.session_state.awaiting_response:
