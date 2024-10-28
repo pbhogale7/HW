@@ -229,7 +229,7 @@ def process_message(input_text, context, conversation_memory, is_voice=False):
     full_response = ""
     for partial_response, tool_usage_info in response_stream:
         st.session_state.temp_message = partial_response  # Store partial response in session state
-        st.experimental_rerun()  # Rerun to show streaming content in real-time
+        st.experimental_set_query_params(dummy=str(time.time()))  # Trigger rerun to update display
 
     if is_voice:
         audio_file = f"audio_response_{int(time.time())}.mp3"
