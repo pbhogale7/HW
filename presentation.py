@@ -20,6 +20,7 @@ import chromadb
 # Initialize OpenAI client
 def setup_openai_client():
     if 'openai_client' not in st.session_state:
+        api_key = st.secrets["openai_api_key"]
         api_key = st.secrets["OPEN_AI_KEY"]
         st.session_state.openai_client = OpenAI(api_key=api_key)
     return st.session_state.openai_client
@@ -155,40 +156,46 @@ def call_llm(model, messages, temp, query, tools=None):
             temperature=temp,
             tools=tools,
             tool_choice="auto" if tools else None,
-            stream=True  # Enable streaming
+            stream=True
         )
     except Exception as e:
         st.error(f"Error calling OpenAI API: {str(e)}")
-        yield "", "Error occurred while generating response."
-        return
+        return "", "Error occurred while generating response."
 
     tool_called = None
-    tool_usage_info = ""
-    
-    # Streaming response chunks
     full_response = ""
-    for chunk in response:
-        if hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
-            for tool_call in chunk.choices[0].delta.tool_calls:
-                if hasattr(tool_call, 'function'):
-                    tool_called = tool_call.function.name
-                    if tool_called == "get_club_info":
-                        extra_info, _ = get_relevant_info(query)
-                        tool_usage_info = f"Tool used: {tool_called}"
-                        for msg in messages:
-                            if msg["role"] == "system":
-                                msg["content"] += f"\n\nAdditional context: {extra_info}"
-                        recursive_response = call_llm(model, messages, temp, query)
-                        for r in recursive_response:
-                            full_response += r[0]
-                            yield full_response, tool_usage_info
-                        return
-        elif hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-            full_response += chunk.choices[0].delta.content
-            yield full_response, tool_usage_info
+    tool_usage_info = ""
 
-    if not tool_called:
-        tool_usage_info = "No tools were used in generating this response."
+    try:
+        for chunk in response:
+            if hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
+                for tool_call in chunk.choices[0].delta.tool_calls:
+                    if hasattr(tool_call, 'function'):
+                        tool_called = tool_call.function.name
+                        if tool_called == "get_club_info":
+                            extra_info, _ = get_relevant_info(query)
+                            tool_usage_info = f"Tool used: {tool_called}"
+                            for msg in messages:
+                                if msg["role"] == "system":
+                                    msg["content"] += f"\n\nAdditional context: {extra_info}"
+                            recursive_response, recursive_tool_info = call_llm(
+                                model, messages, temp, query)
+                            full_response += recursive_response
+                            tool_usage_info += "\n" + recursive_tool_info
+                            return full_response, tool_usage_info
+            elif hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
+
+        if tool_called:
+            tool_usage_info = f"Tool used: {tool_called}"
+        else:
+            tool_usage_info = "No tools were used in generating this response."
+
+        return full_response, tool_usage_info
+
+    except Exception as e:
+        st.error(f"Error in streaming response: {str(e)}")
+        return "I encountered an error while generating the response.", "Error in response generation"
 
 def process_message(input_text, context, conversation_memory, is_voice=False):
     system_message = """You are an AI assistant specialized in providing information about student organizations and clubs at Syracuse University. 
@@ -224,20 +231,15 @@ def process_message(input_text, context, conversation_memory, is_voice=False):
         }
     ]
 
-    response_stream = call_llm("gpt-4o", messages, 0.7, input_text, tools)
-    
-    full_response = ""
-    for partial_response, tool_usage_info in response_stream:
-        st.session_state.temp_message = partial_response  # Store partial response in session state
-        st.experimental_set_query_params(dummy=str(time.time()))  # Trigger rerun to update display
+    response, tool_usage_info = call_llm(
+        "gpt-4o", messages, 0.7, input_text, tools)
 
     if is_voice:
         audio_file = f"audio_response_{int(time.time())}.mp3"
-        text_to_audio(setup_openai_client(), full_response, audio_file)
-        return full_response, tool_usage_info, audio_file
-    
-    return full_response, tool_usage_info, None
+        text_to_audio(setup_openai_client(), response, audio_file)
+        return response, tool_usage_info, audio_file
 
+    return response, tool_usage_info, None
 
 def display_relevant_documents(relevant_docs, relevant_texts):
     """Display relevant documents in a collapsible section"""
@@ -319,23 +321,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Display chat interface
-# Display chat interface
-    # Display chat interface
 if st.session_state.system_ready:
     with chat_container:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 # Display the message content
                 content = message["content"]
-                
+
                 # If it's an assistant message with documents, format nicely
                 if message["role"] == "assistant" and "Relevant Documents:" in content:
                     # Split content and documents
                     main_content, docs_section = content.split("*Relevant Documents:*")
-                    
+
                     # Display main response
                     st.markdown(main_content)
-                    
+
                     # Display documents in a cleaner format
                     st.markdown("📚 Source Documents:")
                     docs = [doc.strip("- ") for doc in docs_section.strip().split("\n")]
@@ -343,19 +343,10 @@ if st.session_state.system_ready:
                         st.markdown(f"- {doc}")
                 else:
                     st.markdown(content)
-                
+
                 # Handle audio if present
                 if "audio" in message:
                     auto_play_audio(message["audio"])
-
-    # Display the temporary streaming message
-    if st.session_state.temp_message:
-        with st.chat_message("assistant"):
-            st.markdown(st.session_state.temp_message)
-
-    # Clear the temporary message after streaming is complete
-    st.session_state.temp_message = None
-
 
     # Footer with input elements
     with st.container():
@@ -370,7 +361,7 @@ if st.session_state.system_ready:
                 key="voice_recorder"
             )
             st.markdown('</div>', unsafe_allow_html=True)
-        
+
         # Text input
         with col1:
             text_input = st.chat_input("Type your message or use voice input...")
@@ -381,13 +372,13 @@ if st.session_state.system_ready:
         relevant_texts, relevant_docs = get_relevant_info(text_input)
         response, tool_usage_info, _ = process_message(
             text_input, relevant_texts, st.session_state.conversation_memory)
-        
+
         # Add user message
         st.session_state.messages.append({
             "role": "user", 
             "content": text_input
         })
-        
+
         # Add assistant message with relevant documents
         st.session_state.messages.append({
             "role": "assistant", 
@@ -395,7 +386,7 @@ if st.session_state.system_ready:
                       "*Relevant Documents:*\n" + 
                       "\n".join([f"- {doc}" for doc in relevant_docs])
         })
-        
+
         st.session_state.conversation_memory.append({
             "question": text_input,
             "answer": response
@@ -407,7 +398,7 @@ if st.session_state.system_ready:
     if recorded_audio is not None and recorded_audio != st.session_state.last_recorded_audio:
         st.session_state.awaiting_response = True
         st.session_state.last_recorded_audio = recorded_audio
-        
+
         # Save and transcribe audio
         audio_file = f"audio_input_{int(time.time())}.mp3"
         with open(audio_file, "wb") as f:
@@ -433,12 +424,12 @@ if st.session_state.system_ready:
                       "\n".join([f"- {doc}" for doc in relevant_docs]),
             "audio": response_audio
         })
-        
+
         st.session_state.conversation_memory.append({
             "question": transcribed_text,
             "answer": response
         })
-        
+
         st.session_state.awaiting_response = False
         st.rerun()
 
