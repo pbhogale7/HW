@@ -20,7 +20,7 @@ import chromadb
 # Initialize OpenAI client
 def setup_openai_client():
     if 'openai_client' not in st.session_state:
-        api_key = st.secrets["OPEN_AI_KEY"]
+        api_key = st.secrets["openai_api_key"]
         st.session_state.openai_client = OpenAI(api_key=api_key)
     return st.session_state.openai_client
 
@@ -145,6 +145,111 @@ def get_relevant_info(query):
         st.error(f"Error querying the database: {str(e)}")
         return "", []
 
+def call_llm(model, messages, temp, query, tools=None):
+    """Call OpenAI's LLM with streaming and tool support"""
+    client = setup_openai_client()
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temp,
+            tools=tools,
+            tool_choice="auto" if tools else None,
+            stream=True
+        )
+    except Exception as e:
+        st.error(f"Error calling OpenAI API: {str(e)}")
+        return "", "Error occurred while generating response."
+
+    tool_called = None
+    full_response = ""
+    tool_usage_info = ""
+
+    try:
+        for chunk in response:
+            if hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
+                for tool_call in chunk.choices[0].delta.tool_calls:
+                    if hasattr(tool_call, 'function'):
+                        tool_called = tool_call.function.name
+                        if tool_called == "get_club_info":
+                            extra_info, _ = get_relevant_info(query)
+                            tool_usage_info = f"Tool used: {tool_called}"
+                            for msg in messages:
+                                if msg["role"] == "system":
+                                    msg["content"] += f"\n\nAdditional context: {extra_info}"
+                            recursive_response, recursive_tool_info = call_llm(
+                                model, messages, temp, query)
+                            full_response += recursive_response
+                            tool_usage_info += "\n" + recursive_tool_info
+                            return full_response, tool_usage_info
+            elif hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
+
+        if tool_called:
+            tool_usage_info = f"Tool used: {tool_called}"
+        else:
+            tool_usage_info = "No tools were used in generating this response."
+
+        return full_response, tool_usage_info
+
+    except Exception as e:
+        st.error(f"Error in streaming response: {str(e)}")
+        return "I encountered an error while generating the response.", "Error in response generation"
+
+def process_message(input_text, context, conversation_memory, is_voice=False):
+    system_message = """You are an AI assistant specialized in providing information about student organizations and clubs at Syracuse University. 
+    Your primary source of information is the context provided. Please be concise and natural in your responses, as they may be converted to speech."""
+
+    condensed_history = "\n".join(
+        [f"Human: {exchange['question']}\nAI: {exchange['answer']}" 
+         for exchange in conversation_memory]
+    )
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": f"Context: {context}\n\nConversation history:\n{condensed_history}\n\nQuestion: {input_text}"}
+    ]
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_club_info",
+                "description": "Get information about a specific club or organization",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "club_name": {
+                            "type": "string",
+                            "description": "The name of the club or organization to look up"
+                        }
+                    },
+                    "required": ["club_name"]
+                }
+            }
+        }
+    ]
+
+    response, tool_usage_info = call_llm(
+        "gpt-4o", messages, 0.7, input_text, tools)
+    
+    if is_voice:
+        audio_file = f"audio_response_{int(time.time())}.mp3"
+        text_to_audio(setup_openai_client(), response, audio_file)
+        return response, tool_usage_info, audio_file
+    
+    return response, tool_usage_info, None
+
+def display_relevant_documents(relevant_docs, relevant_texts):
+    """Display relevant documents in a collapsible section"""
+    with st.expander("📚 View Source Documents Details"):
+        st.markdown("### Source Documents Used")
+        for doc, text in zip(relevant_docs, relevant_texts.split('\n')):
+            st.markdown(f"*Document:* {doc}")
+            with st.expander("View Content"):
+                st.markdown(text[:500] + "..." if len(text) > 500 else text)
+            st.markdown("---")
+
 # Initialize session state
 if 'messages' not in st.session_state:
     st.session_state.messages = []
@@ -164,6 +269,9 @@ if 'cleanup_on_start' not in st.session_state:
 
 st.title("iSchool Voice-Enabled RAG Chatbot")
 
+# Chat history container
+chat_container = st.container()
+
 # Initialize ChromaDB
 if not st.session_state.system_ready:
     with st.spinner("Processing documents and preparing the system..."):
@@ -172,44 +280,157 @@ if not st.session_state.system_ready:
             st.session_state.system_ready = True
             st.success("AI ChatBot is Ready!")
 
-# Display chat history
-chat_container = st.container()
-with chat_container:
-    for message in st.session_state.messages:
-        st.write(message["content"])
+# Custom CSS with fixed positions
+st.markdown("""
+    <style>
+        /* Chat container */
+        .chat-container {
+            margin-bottom: 100px;
+        }
+        
+        /* Input area container */
+        .stChatInput, .input-container {
+            position: fixed !important;
+            bottom: 0 !important;
+            background: white !important;
+            z-index: 99 !important;
+            padding: 1rem !important;
+            margin-right: 1rem !important;
+        }
+        
+        /* Voice recorder container */
+        .voice-recorder-container {
+            position: fixed !important;
+            bottom: 5rem !important;
+            right: 6rem !important;
+            z-index: 100 !important;
+            background: transparent !important;
+        }
+        
+        /* Ensure space at bottom */
+        .main {
+            padding-bottom: 100px !important;
+        }
+        
+        /* Stacked elements */
+        .stStackedContainer {
+            margin-bottom: 100px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-# Text and voice input
-col1, col2 = st.columns([8, 2])
-with col2:
-    st.markdown('<div class="voice-recorder-container">', unsafe_allow_html=True)
-    recorded_audio = audio_recorder(text="", recording_color="#e74c3c", neutral_color="#95a5a6", key="voice_recorder")
-    st.markdown('</div>', unsafe_allow_html=True)
+# Display chat interface
+if st.session_state.system_ready:
+    with chat_container:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                # Display the message content
+                content = message["content"]
+                
+                # If it's an assistant message with documents, format nicely
+                if message["role"] == "assistant" and "Relevant Documents:" in content:
+                    # Split content and documents
+                    main_content, docs_section = content.split("*Relevant Documents:*")
+                    
+                    # Display main response
+                    st.markdown(main_content)
+                    
+                    # Display documents in a cleaner format
+                    st.markdown("📚 Source Documents:")
+                    docs = [doc.strip("- ") for doc in docs_section.strip().split("\n")]
+                    for doc in docs:
+                        st.markdown(f"- {doc}")
+                else:
+                    st.markdown(content)
+                
+                # Handle audio if present
+                if "audio" in message:
+                    auto_play_audio(message["audio"])
 
-with col1:
-    text_input = st.text_input("Type your message or use voice input...")
+    # Footer with input elements
+    with st.container():
+        # Voice recorder
+        col1, col2 = st.columns([8, 2])
+        with col2:
+            st.markdown('<div class="voice-recorder-container">', unsafe_allow_html=True)
+            recorded_audio = audio_recorder(
+                text="",
+                recording_color="#e74c3c",
+                neutral_color="#95a5a6",
+                key="voice_recorder"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Text input
+        with col1:
+            text_input = st.chat_input("Type your message or use voice input...")
 
-# Process text input
-if text_input:
-    st.session_state.messages.append({"role": "user", "content": text_input})
-    # Fetch relevant information, process message, and display response
-    relevant_texts, relevant_docs = get_relevant_info(text_input)
-    response, tool_usage_info, _ = process_message(text_input, relevant_texts, st.session_state.conversation_memory)
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    # Handle text input
+    if text_input and not st.session_state.awaiting_response:
+        st.session_state.awaiting_response = True
+        relevant_texts, relevant_docs = get_relevant_info(text_input)
+        response, tool_usage_info, _ = process_message(
+            text_input, relevant_texts, st.session_state.conversation_memory)
+        
+        # Add user message
+        st.session_state.messages.append({
+            "role": "user", 
+            "content": text_input
+        })
+        
+        # Add assistant message with relevant documents
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": f"{response}\n\n*{tool_usage_info}*\n\n" + 
+                      "*Relevant Documents:*\n" + 
+                      "\n".join([f"- {doc}" for doc in relevant_docs])
+        })
+        
+        st.session_state.conversation_memory.append({
+            "question": text_input,
+            "answer": response
+        })
+        st.session_state.awaiting_response = False
+        st.rerun()
 
-# Process audio input if recorded
-if recorded_audio and recorded_audio != st.session_state.last_recorded_audio:
-    st.session_state.last_recorded_audio = recorded_audio
-    audio_file = f"audio_input_{int(time.time())}.mp3"
-    with open(audio_file, "wb") as f:
-        f.write(recorded_audio)
+    # Handle voice input
+    if recorded_audio is not None and recorded_audio != st.session_state.last_recorded_audio:
+        st.session_state.awaiting_response = True
+        st.session_state.last_recorded_audio = recorded_audio
+        
+        # Save and transcribe audio
+        audio_file = f"audio_input_{int(time.time())}.mp3"
+        with open(audio_file, "wb") as f:
+            f.write(recorded_audio)
 
-    transcribed_text = transcribe_audio(setup_openai_client(), audio_file)
-    st.session_state.messages.append({"role": "user", "content": f"🎤 {transcribed_text}"})
+        transcribed_text = transcribe_audio(setup_openai_client(), audio_file)
+        os.remove(audio_file)
 
-    relevant_texts, relevant_docs = get_relevant_info(transcribed_text)
-    response, tool_usage_info, response_audio = process_message(transcribed_text, relevant_texts, st.session_state.conversation_memory, is_voice=True)
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        # Get response
+        relevant_texts, relevant_docs = get_relevant_info(transcribed_text)
+        response, tool_usage_info, response_audio = process_message(
+            transcribed_text, relevant_texts, st.session_state.conversation_memory, is_voice=True)
 
-    os.remove(audio_file)
-    if response_audio:
-        auto_play_audio(response_audio)
+        # Update chat history with relevant documents
+        st.session_state.messages.append({
+            "role": "user", 
+            "content": f"🎤 {transcribed_text}"
+        })
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": f"{response}\n\n*{tool_usage_info}*\n\n" +
+                      "*Relevant Documents:*\n" + 
+                      "\n".join([f"- {doc}" for doc in relevant_docs]),
+            "audio": response_audio
+        })
+        
+        st.session_state.conversation_memory.append({
+            "question": transcribed_text,
+            "answer": response
+        })
+        
+        st.session_state.awaiting_response = False
+        st.rerun()
+
+if __name__ == "_main_":
+    main()
