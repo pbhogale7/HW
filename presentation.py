@@ -20,7 +20,7 @@ import chromadb
 # Initialize OpenAI client
 def setup_openai_client():
     if 'openai_client' not in st.session_state:
-        api_key = st.secrets["openai_api_key"]
+        api_key = st.secrets["OPEN_AI_KEY"]
         st.session_state.openai_client = OpenAI(api_key=api_key)
     return st.session_state.openai_client
 
